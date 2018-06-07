@@ -1,0 +1,85 @@
+*****************
+* writeup.txt   *
+* HingOn Miu    *
+* hmiu          *
+*****************
+
+-   Beer's Law
+    According to Shirley textbook, the Fresnel equation is multiplied by the
+    attenuation factor k, which is calculated as exp(-a * t). a is the
+    attenuation coefficient and t is the traveled distance. According to
+    Beer-Lambert Law on wikipedia, the calculation of the attenuation
+    coefficient a is (4 * pi * n)/w where n is the refractive index and
+    w is the traveling light's wavelength in the current medium. Thus, along
+    with refractive_index_stack, I also passed in wavelength_stack to record
+    the wavelengths of different medium for calculation. This extra feature
+    is activated by -b flag, and the effect is a bit hard to observe.
+    
+-   Depth of field
+    According to Shirley textbook, the camera eye is enlarged as a square len
+    with camera_len_length as the len's side-length. For each pixel, random
+    points are selected on the square len plane as the new camera eyes. And
+    all these new eyes focus on one focus point before the object. The focal
+    length is hard-coded as a tenth of the length of far clipping plane.
+    This extra feature is activated by -c camera_len_length flag, and the
+    effect is easy to observe. The recommended camera_len_length input is 3.
+
+Implementation decisions:
+1.) Instead of having a member in the geometry to specify what geometry so
+    that I know which intersection test to call, I implemented virtual
+    function in the geometry class to take care of it. Therefore, my code
+    is cleaner and easier to understand. Otherwise, if I have lots of
+    geometry types, I will then have a huge switch statement to check which
+    intersection test to call, which is very inefficient to add/delete a
+    geometry type.
+    
+2.) Instead of having different functions to cast different types of ray, I
+    have a cast_ray function (only 6 lines long!) that can cast all types of
+    ray (reflection rays, refraction rays, and shadow rays). The cast_ray
+    function essentially traverse all geometries in the scene to call
+    intersection tests. Therefore, with this generally applicable cast_ray
+    funtion, it is the only place in my code to traverse the geometries, and
+    so this is a lot cleaner than having the same loop everywhere in my code.
+
+3.) In cast_ray function, I decide to pass the pointer of closest_found_t to
+    each intersection tests for efficiency consideration. For each
+    intersection test, I use the closest_found_t as the upper bound to 
+    find a smaller t, and so further calculation can be skipped if the new
+    found t is bigger than closest_found_t. And so, if a smaller t is found,
+    the closest_found_t is updated and passed to next intersection test.
+
+4.) In order to find the accurate next refractive index in the recursive
+    function, I use a std::vector to store all the refractive index and also
+    a current_stack_position. Two wrong implementations I attempted: 1. only
+    use the stack, and push a new refractive index while the ray enters a
+    dielectric, and pop a old refractive index while the ray leaves a
+    dielectric. 2. use the recursive call parameter to pass refractive index
+    around. The 1st method is wrong because the stack changes globally while
+    passing around recursive call, and so pushing/poping refractive index
+    does not fulfill the original intention locally and so corrupts the stack.
+    The 2nd method is wrong because it does not work when leaving a dielectric.
+    When entering dielectric, it works because I can get the next refractive
+    index from the intersected object. However, when leaving dielectric, the
+    intersected object only contains the same refractive index as the current
+    refractive index, there is no way to know any information about the next
+    medium the ray is about to enter when it leaves the current dielectric.
+    Therefore, my implementation of having a global stack and a local stack
+    index being passed around recursive calls would be correct. While the stack
+    changes globally, the local stack index stays unchanged within a function,
+    and so the correct previous or next refractive index can be retrieved.
+         _____________________________
+        |     ___________________     |
+        |    |     _________     |    |
+    ^   |    |    |     ^   |    |    |
+     \+0|    |    |   +0 \  |    |    |
+      \ |    |    |       \ |    |    |
+       \| +1 | +1 | +1     \| -1 | -1 | -1 
+    --->|--->|--->|-------->|--->|--->|--->
+        |    |    |_________|    |    |
+        |    |___________________|    |
+        |_____________________________|
+    The above diagram shows how the current_stack_position changes. It stays
+    unchanged for reflections (opaque object case and total internal reflection
+    case). It increments when entering a dielectric (a new refractive index is
+    pushed to stack), and decrements when leaving a dielectric (nothing is
+    popped from stack to avoid corruption).
